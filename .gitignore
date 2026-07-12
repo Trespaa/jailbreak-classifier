@@ -1,0 +1,12 @@
+# archivos generados automaticamente por Python
+__pycache__/
+*.pyc
+
+# basura de sistemas operativos / entornos virtuales
+.DS_Store
+venv/
+
+# datos y modelos pesados, se regeneran con los scripts de src/
+data/raw/*.csv
+data/processed/*.csv
+models/*.joblib
