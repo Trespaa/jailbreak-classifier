@@ -35,7 +35,7 @@ def load_and_label(): # es la función que cargará y nombrará y clasificará l
     return df                                    # Cierra la función devolviendo la tabla ya unida y etiquetada
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:     # El : pd.DataFrame  — dice "espero que df sea una tabla de pandas", sino no hay nada que limpiar
-    df = df.dropna(subset=["prompt"])            # "drop NA" (elimina valores vacíos). subset=["prompt"] le dice: solo fijate en prompt 
+    df = df.dropna(subset=["prompt"]).copy()            # "drop NA" (elimina valores vacíos). subset=["prompt"] le dice: solo fijate en prompt
     df["prompt"] = df["prompt"].astype(str).str.strip() # .astype(str): fuerza a que el valor sea texto y .str.strip(): quita espacios en blanco sobrantes al principio y al final del texto
     df = df[df["prompt"].str.len() >= MIN_CHARS] #df["prompt"].str.len() calcula la longitud (número de caracteres). Compara con los minimos, te quedas solo con las filas donde el resultado fue True
     df = df.drop_duplicates(subset="prompt")     # quita los repetidos, que solo inflan porcentaje de aprendizaje
@@ -52,25 +52,32 @@ def balance(df: pd.DataFrame) -> pd.DataFrame: # balance() recorta la clase mayo
     ).reset_index(drop=True)    #  renumera los índices de 0 en adelante, limpio, sin arrastrar los índices viejos, los viejos los desecha
     return balanced
 
+def split_dataset(df: pd.DataFrame):
+    """Create deterministic stratified train/validation/test splits (70/15/15)."""
+    holdout_size = round(len(df) * 0.15)
+    train_val, test = train_test_split(
+        df, test_size=holdout_size, stratify=df["label"], random_state=RANDOM_STATE
+    )
+    train, val = train_test_split(
+        train_val, test_size=holdout_size,
+        stratify=train_val["label"], random_state=RANDOM_STATE
+    )
+    return train, val, test
+
+
 def main():
     df = load_and_label()
-    print(f"Raw combined: {len(df)} rows")                # guarda el resultado en df, e imprime cuántas filas hay. len(df) en un DataFrame de pandas te da el número de filas 
+    print(f"Raw combined: {len(df)} rows")                # guarda el resultado en df, e imprime cuántas filas hay. len(df) en un DataFrame de pandas te da el número de filas
 
     df = clean(df)
-    print(f"After cleaning/dedup: {len(df)} rows "         # Le pasa el resultado anterior a clean(), y reasigna df con la versión limpia. df['label'].value_counts() (ya la conoces, de balance()) cuenta cuántas filas hay de cada clase. .to_dict() convierte ese resultado a un diccionario normal de Python ({0: 13106, 1: 1363}) 
+    print(f"After cleaning/dedup: {len(df)} rows "         # Le pasa el resultado anterior a clean(), y reasigna df con la versión limpia. df['label'].value_counts() (ya la conoces, de balance()) cuenta cuántas filas hay de cada clase. .to_dict() convierte ese resultado a un diccionario normal de Python ({0: 13106, 1: 1363})
           f"({df['label'].value_counts().to_dict()})")
 
     df = balance(df)
     print(f"After balancing: {len(df)} rows "              # ahora con balance(). Después de esto, df debería tener las dos clases exactamente igualadas (recuerda: 2,726 filas totales, 1,363 de cada una)
           f"({df['label'].value_counts().to_dict()})")
 
-    train_val, test = train_test_split(
-        df, test_size=0.15, stratify=df["label"], random_state=RANDOM_STATE   # Primer corte. test_size=0.15 significa "el 15% va a un lado (test), el 85% restante al otro (train_val)". 
-    )
-    train, val = train_test_split(
-        train_val, test_size=0.1765, # Segundo corte, esta vez partiendo train_val Aquí test_size=0.1765 para que val se lleve otro 15% del restante y train se lleve el 70%
-        stratify=train_val["label"], random_state=RANDOM_STATE
-    )
+    train, val, test = split_dataset(df)
 
     for name, split in [("train", train), ("val", val), ("test", test)]:
         split.to_csv(OUT_DIR / f"{name}.csv", index=False)
