@@ -46,35 +46,66 @@ prediction.
 
 ## Results
 
-The selected model (Linear SVM) evaluated on the held-out test set — touched
-exactly once, after every other decision was already made — scored:
+A clean run with the dependency versions available on 18 September 2026 selected
+Linear SVM on validation F1 and produced the following held-out test results:
 
 | Metric | Score |
 |---|---|
-| Accuracy | 0.81 |
-| Precision (jailbreak) | 0.84 |
-| Recall (jailbreak) | 0.76 |
-| F1 (jailbreak) | 0.80 |
-| ROC-AUC | 0.906 |
+| Accuracy | 0.824 |
+| Precision (jailbreak) | 0.859 |
+| Recall (jailbreak) | 0.775 |
+| F1 (jailbreak) | 0.814 |
+| ROC-AUC | 0.911 |
 
-In practice: when the model flags something as a jailbreak, it's right 84%
-of the time, but it still misses about 1 in 4 real jailbreak attempts.
+The exact machine-readable results are committed in `reports/metrics.json`.
+`requirements.txt` pins the versions used to generate them, and the training and split
+seeds are fixed for repeatable results on Python 3.10.
 
 ## Limitations and error analysis
 
-The error analysis (see `reports/error_analysis.md`) showed two clear
-patterns. False negatives — jailbreaks the model misses — tend to be
-obfuscated prompts or unfilled template scaffolding. False positives —
-benign prompts flagged as dangerous — tend to be legitimate roleplay
-requests that share surface structure with DAN-style jailbreaks.
+The held-out run misclassified 72 of 409 prompts: 46 false negatives and 26 false
+positives. Aggregate statistics are in [`reports/error_analysis.md`](reports/error_analysis.md).
+Prompt text is intentionally excluded from the repository because the source data may
+contain unsafe or sensitive content.
 
-The underlying issue: a classifier built on n-grams only sees the surface
-form of a prompt, not its actual intent, so it can't reliably tell a benign
-roleplay request from a malicious one — they can look nearly identical at
-the text level. This isn't something more training data fixes on its own,
-because the problem isn't data volume, it's what kind of information the
-model has access to. A more realistic fix would be giving the model access
-to conversation context rather than a single isolated prompt — with enough
-turns of context, it becomes possible to tell whether someone is actually
-building toward a harmful request or just running an innocent roleplay
-scenario, something a single-prompt classifier structurally cannot do.
+This baseline uses n-gram surface features from isolated prompts. It cannot reliably
+infer intent or use conversation context. The random stratified split removes exact
+duplicates before splitting, but it does not yet group templates or near-duplicates;
+closely related variants could therefore cross splits and make generalization look
+better than it is. The balanced held-out set is useful for model comparison, but its
+precision and accuracy do not represent deployment prevalence. A grouped split and a
+naturally distributed external test set are the next evaluation improvements.
+
+## Reproduce the published evaluation
+
+Use Python 3.10 in a clean virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python src/download_data.py
+python src/data_prep.py
+python src/train.py
+pytest -q
+```
+
+Training regenerates:
+
+- `reports/metrics.json`: machine-readable validation and held-out test metrics.
+- `reports/error_analysis.md`: aggregate error statistics without raw prompt text.
+- `reports/figures/`: confusion matrices for each evaluated model.
+
+Raw data, fitted models, and prompt-level errors are intentionally not committed. The data
+can contain unsafe or sensitive text; regenerate and inspect it locally if needed. GitHub
+Actions runs the deterministic unit tests on every push and pull request. Full training is
+kept as an explicit local step because it downloads the research dataset.
+
+## Repository layout
+
+- `src/download_data.py`: fetch the source dataset.
+- `src/data_prep.py`: clean, balance, and create deterministic splits.
+- `src/train.py`: train, select, evaluate, and write reports.
+- `src/predict.py`: classify one prompt with a locally trained model.
+- `tests/`: data-preparation and privacy-preserving reporting checks.
+- `reports/`: committed, reproducible evaluation outputs.
