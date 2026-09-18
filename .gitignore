@@ -10,3 +10,5 @@ venv/
 data/raw/*.csv
 data/processed/*.csv
 models/*.joblib
+# local raw error exports (may contain sensitive prompt text)
+reports/test_errors.csv
